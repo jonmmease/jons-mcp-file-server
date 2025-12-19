@@ -22,23 +22,11 @@ class TestGetFileServer:
         cleanup_file_server()
         reset_file_server()
 
-    def test_auto_selects_localhost_by_default(self) -> None:
-        """Test that auto backend selects localhost when GCS_BUCKET not set."""
-        # Ensure GCS_BUCKET is not set
-        with patch.dict(os.environ, {}, clear=True):
-            os.environ.pop("GCS_BUCKET", None)
-            reset_file_server()
-            server = get_file_server(backend="auto", port=0)
-            assert isinstance(server, LocalhostFileServer)
-            server.stop()
-
-    def test_auto_selects_gcs_when_bucket_set(self) -> None:
-        """Test that auto backend selects GCS when GCS_BUCKET is set."""
-        with patch.dict(os.environ, {"GCS_BUCKET": "test-bucket"}):
-            with patch("jons_mcp_file_server.gcs.storage"):
-                reset_file_server()
-                server = get_file_server(backend="auto")
-                assert isinstance(server, GCSFileServer)
+    def test_default_selects_localhost(self) -> None:
+        """Test that default backend is localhost."""
+        server = get_file_server(port=0)
+        assert isinstance(server, LocalhostFileServer)
+        server.stop()
 
     def test_explicit_localhost_backend(self) -> None:
         """Test explicit localhost backend selection."""
@@ -61,6 +49,14 @@ class TestGetFileServer:
                 get_file_server(backend="gcs")
             assert "GCS_BUCKET" in str(exc_info.value)
 
+    def test_gcs_uses_env_bucket(self) -> None:
+        """Test that GCS backend uses GCS_BUCKET env var."""
+        with patch.dict(os.environ, {"GCS_BUCKET": "env-bucket"}):
+            with patch("jons_mcp_file_server.gcs.storage"):
+                server = get_file_server(backend="gcs")
+                assert isinstance(server, GCSFileServer)
+                assert server._bucket_name == "env-bucket"
+
     def test_singleton_returns_same_instance(self) -> None:
         """Test that get_file_server returns the same instance."""
         server1 = get_file_server(backend="localhost", port=0)
@@ -73,7 +69,6 @@ class TestGetFileServer:
         server = get_file_server(
             backend="localhost",
             port=0,
-            ngrok=False,
             download_token_ttl=1800,
         )
         assert server._download_token_ttl == 1800

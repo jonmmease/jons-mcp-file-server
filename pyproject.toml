@@ -6,7 +6,6 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "google-cloud-storage>=2.0.0",
-    "pyngrok>=7.0.0",
 ]
 
 [project.optional-dependencies]

@@ -12,7 +12,7 @@ def test_gcs_file_server_implements_protocol():
 
 def test_localhost_file_server_implements_protocol():
     """Test that LocalhostFileServer implements the FileServer protocol."""
-    server = LocalhostFileServer(ngrok=False, port=0)
+    server = LocalhostFileServer(port=0)
     try:
         assert isinstance(server, FileServer)
     finally:

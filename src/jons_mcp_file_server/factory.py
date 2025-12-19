@@ -11,7 +11,7 @@ _instance: FileServer | None = None
 
 
 def get_file_server(
-    backend: Literal["gcs", "localhost", "auto"] = "auto",
+    backend: Literal["gcs", "localhost"] = "localhost",
     **kwargs,
 ) -> FileServer:
     """Get or create the file server instance.
@@ -22,8 +22,7 @@ def get_file_server(
     Args:
         backend: Which backend to use
             - "gcs": Use GCS signed URLs (requires GCS_BUCKET env var or bucket_name kwarg)
-            - "localhost": Use LocalhostFileServer (optionally with ngrok)
-            - "auto": Use GCS if GCS_BUCKET is set, else localhost
+            - "localhost": Use LocalhostFileServer (localhost URLs only)
         **kwargs: Backend-specific configuration
             For gcs:
                 - bucket_name: GCS bucket name (or use GCS_BUCKET env var)
@@ -31,7 +30,6 @@ def get_file_server(
                 - upload_ttl: Seconds until upload URLs expire (default 300)
                 - credentials_path: Path to service account JSON (or use GOOGLE_APPLICATION_CREDENTIALS)
             For localhost:
-                - ngrok: If True, create ngrok tunnel for public URLs
                 - port: Port to listen on (default 9171 or MCP_FILE_SERVER_PORT env var)
                 - download_token_ttl: Seconds until download tokens expire (default 3600)
                 - upload_token_ttl: Seconds until upload tokens expire (default 300)
@@ -46,12 +44,6 @@ def get_file_server(
 
     if _instance is not None:
         return _instance
-
-    if backend == "auto":
-        if os.environ.get("GCS_BUCKET"):
-            backend = "gcs"
-        else:
-            backend = "localhost"
 
     if backend == "gcs":
         bucket_name = kwargs.get("bucket_name") or os.environ.get("GCS_BUCKET")
@@ -69,7 +61,6 @@ def get_file_server(
         )
     else:
         _instance = LocalhostFileServer(
-            ngrok=kwargs.get("ngrok", False),
             port=kwargs.get("port"),
             download_token_ttl=kwargs.get("download_token_ttl", 3600),
             upload_token_ttl=kwargs.get("upload_token_ttl", 300),
@@ -81,7 +72,7 @@ def get_file_server(
 def cleanup_file_server() -> None:
     """Stop and clean up the file server instance.
 
-    Call this at shutdown to release resources (temp files, ngrok tunnel, etc.)
+    Call this at shutdown to release resources (temp files, etc.)
     """
     global _instance
     if _instance is not None:

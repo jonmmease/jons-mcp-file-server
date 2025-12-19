@@ -3,10 +3,12 @@
 Provides:
 - HTTP server to serve files (e.g., screenshots, browser downloads)
 - HTTP endpoint for receiving file uploads
-- Optional ngrok tunnel for public URL access
 - Security via session-scoped token whitelist with TTL
 - Lazy initialization (only starts on first use)
 - Automatic cleanup of expired tokens and files
+
+Note: This server only works for local access (localhost URLs).
+For remote access, use GCSFileServer with signed URLs.
 """
 
 import http.server
@@ -27,7 +29,7 @@ from uuid import uuid4
 
 logger = logging.getLogger(__name__)
 
-# Default port for the file server (fixed for reliable ngrok tunnel management)
+# Default port for the file server
 # Override with MCP_FILE_SERVER_PORT environment variable if needed
 DEFAULT_FILE_SERVER_PORT = 9171
 
@@ -74,8 +76,10 @@ class UploadedFile:
 class LocalhostFileServer:
     """HTTP server for file uploads and downloads with token-based access control.
 
+    This server provides localhost URLs only. For remote access (e.g., when the
+    MCP client cannot access localhost), use GCSFileServer instead.
+
     Args:
-        ngrok: If True, create ngrok tunnel for public URLs (requires NGROK_AUTHTOKEN)
         download_token_ttl: TTL for download tokens in seconds (default 1 hour)
         upload_token_ttl: TTL for upload tokens in seconds (default 5 minutes)
         port: Port to listen on. None uses DEFAULT_FILE_SERVER_PORT or MCP_FILE_SERVER_PORT
@@ -84,12 +88,10 @@ class LocalhostFileServer:
 
     def __init__(
         self,
-        ngrok: bool = False,
         download_token_ttl: int = DEFAULT_DOWNLOAD_TOKEN_TTL,
         upload_token_ttl: int = DEFAULT_UPLOAD_TOKEN_TTL,
         port: int | None = None,
     ):
-        self._ngrok_enabled = ngrok
         self._download_token_ttl = download_token_ttl
         self._upload_token_ttl = upload_token_ttl
         self._requested_port = port  # None = use default, 0 = random
@@ -101,7 +103,6 @@ class LocalhostFileServer:
         self._cleanup_timer: Optional[threading.Timer] = None
         self._port: Optional[int] = None
         self._public_base_url: Optional[str] = None
-        self._ngrok_tunnel = None
         self._lock = threading.Lock()
         self._is_running = False
         self._upload_dir: Optional[str] = None
@@ -113,13 +114,13 @@ class LocalhostFileServer:
 
     @property
     def public_base_url(self) -> Optional[str]:
-        """Get the public base URL (localhost or ngrok)."""
+        """Get the base URL (localhost)."""
         return self._public_base_url
 
     def ensure_running(self) -> None:
         """Ensure the server is running (lazy initialization).
 
-        Creates HTTP server on first call. ngrok tunnel is started if configured.
+        Creates HTTP server on first call.
         """
         with self._lock:
             if self._is_running:
@@ -361,7 +362,7 @@ class LocalhostFileServer:
                             json.dumps({"error": f"Upload failed: {str(e)}"}).encode()
                         )
 
-            # Determine port (fixed port enables reliable ngrok tunnel cleanup)
+            # Determine port
             if self._requested_port is not None:
                 port = self._requested_port
             else:
@@ -381,10 +382,6 @@ class LocalhostFileServer:
                 target=self._server.serve_forever, daemon=True
             )
             self._server_thread.start()
-
-            # Start ngrok if configured
-            if self._ngrok_enabled:
-                self._start_ngrok()
 
             # Start cleanup timer
             self._schedule_cleanup()
@@ -429,50 +426,6 @@ class LocalhostFileServer:
                     return content, filename
 
         return None, ""
-
-    def _start_ngrok(self) -> None:
-        """Start ngrok tunnel."""
-        auth_token = os.environ.get("NGROK_AUTHTOKEN")
-        if not auth_token:
-            raise ValueError(
-                "NGROK_AUTHTOKEN environment variable is required when ngrok is enabled. "
-                "Get your auth token from https://dashboard.ngrok.com/get-started/your-authtoken"
-            )
-
-        from pyngrok import conf, ngrok
-        from pyngrok.exception import PyngrokNgrokError
-
-        conf.get_default().auth_token = auth_token
-
-        # Disconnect any existing tunnel to our port (from crashed sessions)
-        # This is more surgical than ngrok.kill() which would affect other servers
-        try:
-            for tunnel in ngrok.get_tunnels():
-                # Check if this tunnel forwards to our port
-                tunnel_addr = tunnel.config.get("addr", "")
-                if str(self._port) in str(tunnel_addr):
-                    logger.info(f"Disconnecting stale tunnel to port {self._port}")
-                    ngrok.disconnect(tunnel.public_url)
-        except Exception:
-            pass  # Ignore errors if ngrok isn't running
-
-        try:
-            self._ngrok_tunnel = ngrok.connect(self._port, "http")
-        except PyngrokNgrokError as e:
-            # ERR_NGROK_334: endpoint already online (stale tunnel from crash)
-            # Kill the local ngrok process and retry - this clears stale tunnels
-            if "ERR_NGROK_334" in str(e):
-                logger.warning("Stale ngrok tunnel detected, killing ngrok and retrying")
-                try:
-                    ngrok.kill()
-                except Exception:
-                    pass
-                # Retry connection
-                self._ngrok_tunnel = ngrok.connect(self._port, "http")
-            else:
-                raise
-
-        self._public_base_url = self._ngrok_tunnel.public_url
 
     def _schedule_cleanup(self) -> None:
         """Schedule periodic cleanup of expired tokens."""
@@ -620,17 +573,6 @@ class LocalhostFileServer:
             if self._cleanup_timer:
                 self._cleanup_timer.cancel()
                 self._cleanup_timer = None
-
-            # Close ngrok tunnel
-            if self._ngrok_tunnel:
-                try:
-                    from pyngrok import ngrok
-
-                    ngrok.disconnect(self._ngrok_tunnel.public_url)
-                    ngrok.kill()
-                except Exception:
-                    pass
-                self._ngrok_tunnel = None
 
             # Shutdown HTTP server
             if self._server:

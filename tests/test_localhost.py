@@ -18,7 +18,7 @@ class TestLocalhostFileServer:
     @pytest.fixture
     def server(self):
         """Create a test server instance."""
-        srv = LocalhostFileServer(ngrok=False, download_token_ttl=60, port=0)
+        srv = LocalhostFileServer(download_token_ttl=60, port=0)
         yield srv
         srv.stop()
 
@@ -98,7 +98,7 @@ class TestLocalhostFileServer:
 
     def test_expired_token_returns_404(self, temp_file: str) -> None:
         """Test that expired tokens return 404."""
-        server = LocalhostFileServer(ngrok=False, download_token_ttl=1, port=0)
+        server = LocalhostFileServer(download_token_ttl=1, port=0)
         try:
             result = server.register_download(temp_file, "test.txt")
             url = result["url"]
@@ -136,7 +136,7 @@ class TestUploadFunctionality:
     @pytest.fixture
     def server(self):
         """Create a test server instance."""
-        srv = LocalhostFileServer(ngrok=False, upload_token_ttl=60, port=0)
+        srv = LocalhostFileServer(upload_token_ttl=60, port=0)
         yield srv
         srv.stop()
 
@@ -155,7 +155,7 @@ class TestUploadFunctionality:
 
     def test_upload_token_expires(self) -> None:
         """Test that upload tokens expire after TTL."""
-        server = LocalhostFileServer(ngrok=False, upload_token_ttl=1, port=0)
+        server = LocalhostFileServer(upload_token_ttl=1, port=0)
         try:
             result = server.register_upload()
             token = result["uploadToken"]
