@@ -59,7 +59,58 @@ export GCS_BUCKET=my-bucket
 
 ## GCS Setup Guide
 
-This guide walks you through setting up a GCS bucket for use with jons-mcp-file-server.
+This guide walks you through setting up a GCS bucket for use with jons-mcp-file-server, starting from scratch.
+
+### Prerequisites: Install and Configure Google Cloud CLI
+
+#### Install gcloud CLI
+
+**macOS (with Homebrew):**
+```bash
+brew install --cask google-cloud-sdk
+```
+
+**macOS (manual):**
+```bash
+# Download and extract
+curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-darwin-arm.tar.gz
+tar -xf google-cloud-cli-darwin-arm.tar.gz
+./google-cloud-sdk/install.sh
+
+# Restart your shell or run:
+source ~/.zshrc
+```
+
+**Linux:**
+```bash
+curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-x86_64.tar.gz
+tar -xf google-cloud-cli-linux-x86_64.tar.gz
+./google-cloud-sdk/install.sh
+source ~/.bashrc
+```
+
+**Windows:**
+Download and run the installer from https://cloud.google.com/sdk/docs/install
+
+#### Authenticate and Create a Project
+
+```bash
+# Log in to Google Cloud (opens browser)
+gcloud auth login
+
+# Create a new project (or use an existing one)
+# Project IDs must be globally unique
+gcloud projects create YOUR_PROJECT_ID --name="MCP File Server"
+
+# Set as default project
+gcloud config set project YOUR_PROJECT_ID
+
+# Enable billing (required for GCS)
+# Visit: https://console.cloud.google.com/billing/linkedaccount?project=YOUR_PROJECT_ID
+# Or link via CLI if you have a billing account:
+# gcloud billing accounts list
+# gcloud billing projects link YOUR_PROJECT_ID --billing-account=BILLING_ACCOUNT_ID
+```
 
 ### 1. Create a GCS Bucket
 
